@@ -6,8 +6,6 @@ import pprint
 import json 
 import time
 import logging 
-
-# Utility imports
 try:
     from utils.config_parser import load_yaml_config, merge_configs, save_config_to_yaml, get_config_value #type: ignore
     from utils.logging_setup import setup_logger, get_logger
@@ -17,22 +15,17 @@ except ImportError as e:
     logging.basicConfig(level=logging.ERROR)
     logging.error(f"Critical Error: Could not import utility modules: {e}. Ensure PYTHONPATH is correctly set and all util files exist.")
     exit(1)
-
-# Data handling imports
 try:
     from data_handling.base_loader import BaseVLNDataset 
     from data_handling.touchdown_loader import TouchdownDatasetLoader
     from data_handling.map2seq_loader import Map2SeqDatasetLoader
     from data_handling.graph_loader import VLNGraphLoader 
-
     # from data_handling.panorama_dataset import PanoramaDatasetForMAE 
     # from data_handling.synthetic_trajectory_dataset import SyntheticTrajectoryDatasetForLTM
     from transformers import AutoTokenizer, PreTrainedTokenizerBase
 except ImportError as e:
     get_logger("Mem4NavApp.main").error(f"Critical Error: Could not import data_handling modules or transformers: {e}. Ensure dependencies are installed and PYTHONPATH is correct.")
     exit(1)
-
-
 try:
     from agents.base_vln_agent import BaseVLNAgent # For type hinting
     from agents.modular_pipeline.agent import ModularAgent
@@ -41,16 +34,12 @@ try:
 except ImportError as e:
     get_logger("Mem4NavApp.main").error(f"Critical Error: Could not import agent modules: {e}. Ensure agent files exist and are correct.")
     exit(1)
-
-# Training and Evaluation imports
 try:
     from training_utils.trainer import Trainer
     from evaluation_utils.evaluator import Evaluator, EnvironmentGraph
 except ImportError as e:
     get_logger("Mem4NavApp.main").error(f"Critical Error: Could not import training_utils or evaluation_utils modules: {e}.")
     exit(1)
-
-
 def parse_arguments() -> argparse.Namespace:
     """Parses command-line arguments."""
     parser = argparse.ArgumentParser(description="Mem4Nav: Training and Evaluation Framework")
@@ -123,8 +112,6 @@ def load_and_prepare_config(args: argparse.Namespace) -> Dict[str, Any]:
         if not config['training'].get('resume_from_checkpoint'):
             config['training']['resume_from_checkpoint'] = args.checkpoint_path
         config['experiment']['load_checkpoint_path'] = args.checkpoint_path # Also set for initial load
-
-    # Construct full output directory path (critical for logging and saving)
     exp_name = get_config_value(config, "experiment.name", "unnamed_experiment")
     output_root = get_config_value(config, "experiment.output_dir_root", "./outputs_mem4nav")
     config['experiment']['full_output_dir'] = os.path.join(output_root, exp_name, time.strftime("%Y%m%d-%H%M%S"))
@@ -148,7 +135,6 @@ def get_tokenizer(config: Dict[str, Any], agent_type: str) -> Optional[PreTraine
         if llm_model_name and not llm_model_name.startswith("openai/"): # OpenAI API handles tokenization server-side
             tokenizer_name_or_path = llm_model_name
     elif agent_type == "modular":
-        # Modular agent might use a generic LM for policy or specific tokenizer for instruction processing
         tokenizer_name_or_path = agent_specific_config.get('tokenizer_path', 
                                      get_config_value(config, "data_handling.default_tokenizer"))
                                      
@@ -177,9 +163,6 @@ def get_vln_dataloader(config: Dict[str, Any], dataset_name: str, split: str, to
 
     dataset_instance: Optional[BaseVLNDataset] = None #type: ignore
     loader_config_key_in_dh = f"{dataset_name}_loader" # e.g., "touchdown_loader"
-    # The main config for specific loader (like path) is now under data_handling.touchdown_loader.specific_path
-    # So, we pass the whole `config` to the dataset loader constructor, and it extracts its part.
-
     if dataset_name.lower() == "touchdown":
         dataset_instance = TouchdownDatasetLoader(config, split, tokenizer, max_instr_len, name=loader_config_key_in_dh.capitalize())
     elif dataset_name.lower() == "map2seq":
@@ -197,7 +180,6 @@ def get_vln_dataloader(config: Dict[str, Any], dataset_name: str, split: str, to
         collate_fn=getattr(dataset_instance, 'collate_fn', None) # Use custom collate if defined by dataset
     )
 
-# Placeholder for pre-training dataset loaders
 def get_pretrain_dataloader(config: Dict[str, Any], phase_name: str, dataset_type_config_key: str,  #type: ignore
                             tokenizer: Optional[PreTrainedTokenizerBase]) -> Optional[DataLoader]:   
     logger = get_logger("Mem4NavApp.main.dataloader")
@@ -251,17 +233,14 @@ def run_training(args: argparse.Namespace, config: Dict[str, Any], device: torch
     training_config = get_config_value(config, "training", required=True)
     phases_config = get_config_value(training_config, "phases", required=True)
 
-    # Phase 1 Dataloader
     if get_config_value(phases_config, "phase1_visual.enabled", False):
         dl = get_pretrain_dataloader(config, "phase1_visual", "panorama_dataset_for_mae", tokenizer)
         if dl: train_dataloaders["phase1_visual"] = dl
-    
-    # Phase 2 Dataloader
+
     if get_config_value(phases_config, "phase2_ltm.enabled", False):
         dl = get_pretrain_dataloader(config, "phase2_ltm", "synthetic_trajectory_dataset_for_ltm", tokenizer)
         if dl: train_dataloaders["phase2_ltm_synthetic"] = dl
 
-    # Phase 3 Dataloader (and VLN validation dataloader)
     if get_config_value(phases_config, "phase3_e2e_nav.enabled", True):
         dataset_name = get_config_value(config, "data_handling.dataset_name", required=True)
         p3_train_split = get_config_value(phases_config, "phase3_e2e_nav.train_split", "train")
@@ -274,8 +253,6 @@ def run_training(args: argparse.Namespace, config: Dict[str, Any], device: torch
             logger.error(f"Failed to load dataloaders for Phase 3: {e}. Phase 3 might be skipped or fail.")
             if "phase3_vln" in train_dataloaders: del train_dataloaders["phase3_vln"]
             val_dataloader_vln = None
-
-    # --- Initialize Trainer ---
     trainer = Trainer(
         agent=agent,
         train_dataloaders=train_dataloaders,
@@ -358,8 +335,6 @@ def run_evaluation(args: argparse.Namespace, config: Dict[str, Any], device: tor
         logger.warning(f"Environment graph directory not found: {graph_data_dir}. Using mock graph in Evaluator.")
         env_graph = EnvironmentGraph()
         env_graph.add_mock_nodes_and_edges()
-
-    # --- Initialize Evaluator ---
     evaluator = Evaluator(
         agent=agent,
         dataloader=eval_dataloader,
@@ -369,7 +344,6 @@ def run_evaluation(args: argparse.Namespace, config: Dict[str, Any], device: tor
     )
     metrics = evaluator.evaluate()
 
-    # --- Save Metrics ---
     output_dir = get_config_value(config, "experiment.full_output_dir")
     metrics_file_name = f"metrics_{args.agent_type}_{dataset_name}_{eval_split}"
     if checkpoint_path:
