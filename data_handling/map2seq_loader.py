@@ -2,8 +2,6 @@ import torch
 import json
 import os
 from typing import Dict, Any, Optional, List
-
-
 try:
     from .base_loader import BaseVLNDataset
     # from .utils import tokenize_instructions # Tokenization is handled by base class
