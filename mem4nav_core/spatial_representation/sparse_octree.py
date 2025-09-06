@@ -1,8 +1,6 @@
 import numpy as np
 import torch
 from typing import Optional, Dict, Tuple, Any
-
-
 def _split_by_3bits(coord: int) -> int:
     """Interleaves 0s between bits of a 21-bit coordinate for Morton encoding."""
     x = coord & 0x1fffff  # Mask to 21 bits
