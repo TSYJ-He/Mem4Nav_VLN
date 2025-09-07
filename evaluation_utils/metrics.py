@@ -7,8 +7,6 @@ def euclidean_distance(point1: np.ndarray, point2: np.ndarray) -> float:
         raise ValueError(f"Points must have the same shape. Got {point1.shape} and {point2.shape}")
     return np.linalg.norm(point1 - point2)   
 
-
-
 def calculate_task_completion(
     distances_to_goal: List[float],
     success_threshold: float = 3.0
