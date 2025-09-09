@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from typing import Dict, Any, Tuple, List, Union
-
 class ControlModule(nn.Module):
     """
     Control Module for the Modular Pipeline Agent.
